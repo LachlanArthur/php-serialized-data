@@ -1,0 +1,12 @@
+{
+	"compilerOptions": {
+		"target": "es2020",
+		"module": "esnext",
+		"strict": true,
+		"noImplicitAny": true,
+		"sourceMap": true,
+		"skipLibCheck": true,
+	},
+	"include": ["src/index.ts"],
+	"exclude": ["node_modules"],
+}
