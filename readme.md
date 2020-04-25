@@ -13,10 +13,10 @@ const data = parse( 'O:8:"stdClass":1:{s:3:"foo";s:3:"bar";}' );
 
 /*
 PHPObject(
-  className: 'stdClass'
-  value: Map [
-    [ PHPString( 'foo' ), PHPString( 'bar' ) ],
-  ]
+  className: 'stdClass',
+  value: Map( [
+    [ PHPString( value: 'foo' ), PHPString( value: 'bar' ) ],
+  ] ),
 )
 */
 ```
@@ -29,9 +29,7 @@ import { parse } from 'php-serialized-data';
 const data = parse( 's:4:"🐊";' );
 
 /*
-PHPString(
-  value: '🐊'
-)
+PHPString( value: '🐊' )
 */
 ```
 
