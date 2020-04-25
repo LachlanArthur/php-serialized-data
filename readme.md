@@ -12,10 +12,10 @@ import { parse } from 'php-serialized-data';
 const data = parse( 'O:8:"stdClass":1:{s:3:"foo";s:3:"bar";}' );
 
 /*
-ObjectToken(
+PHPObject(
   className: 'stdClass'
   value: Map [
-    [ StringToken( 'foo' ), StringToken( 'bar' ) ],
+    [ PHPString( 'foo' ), PHPString( 'bar' ) ],
   ]
 )
 */
@@ -29,7 +29,7 @@ import { parse } from 'php-serialized-data';
 const data = parse( 's:4:"🐊";' );
 
 /*
-StringToken( '🐊' )
+PHPString( '🐊' )
 */
 ```
 
