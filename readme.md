@@ -29,7 +29,9 @@ import { parse } from 'php-serialized-data';
 const data = parse( 's:4:"🐊";' );
 
 /*
-PHPString( '🐊' )
+PHPString(
+  value: '🐊'
+)
 */
 ```
 
