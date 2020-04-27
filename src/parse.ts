@@ -98,7 +98,7 @@ export namespace PHPTypes {
 	export class PHPReference extends makeRegExpClass( /^[Rr]:([^;]+);/, input => parseInt( input ) ) { }
 
 	export type PHPBooleanIdentifier = 'b';
-	export class PHPBoolean extends makeRegExpClass( /^b:([01]);/, input => globalThis.Boolean( parseInt( input ) ) ) { }
+	export class PHPBoolean extends makeRegExpClass( /^b:([01]);/, input => Boolean( parseInt( input ) ) ) { }
 
 	export type PHPFloatIdentifier = 'd';
 	export class PHPFloat extends makeRegExpClass( /^d:([^;]+);/, input => parseFloat( input.replace( 'INF', 'Infinity' ) ) ) { }
