@@ -1,6 +1,6 @@
 {
 	"name": "php-serialized-data",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"repository": "https://github.com/LachlanArthur/php-serialized-data",
 	"author": "LachlanArthur",
 	"license": "MIT",
