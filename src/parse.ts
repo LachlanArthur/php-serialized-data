@@ -1,4 +1,4 @@
-export function parse( input: string ): [ PHPTypes.Types, number ] {
+export function parse( input: string ): PHPTypes.Types {
 
 	if ( typeof input !== 'string' ) {
 		throw new TypeError( 'Input must be a string' );
@@ -57,17 +57,19 @@ export function parseFixedLengthString( input: string, openingDelimiter = '"', c
 
 export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string ) => T ) {
 
-	return class RegExpClass {
+	return class RegExpClass extends PHPTypes.Base {
 
-		constructor( public value: T ) { }
+		constructor( public length: number, public value: T ) {
+			super();
+		}
 
-		static build( input: string ): [ RegExpClass, number ] {
+		static build( input: string ): RegExpClass {
 
 			const matches = input.match( regex );
 
 			if ( matches !== null ) {
 				const value = valueParser( matches[ 1 ] );
-				return [ new this( value ), matches[ 0 ].length ];
+				return new this( matches[ 0 ].length, value );
 			} else {
 				throw new Error( 'Failed to parse ' + this.name );
 			}
@@ -79,6 +81,10 @@ export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string 
 }
 
 export namespace PHPTypes {
+
+	export abstract class Base {
+		abstract length: number;
+	}
 
 	export type PHPReferenceIdentifier = 'R' | 'r';
 	export class PHPReference extends makeRegExpClass( /^[Rr]:([^;]+);/, input => parseInt( input ) ) { }
@@ -95,18 +101,20 @@ export namespace PHPTypes {
 	export type PHPNullIdentifier = 'N';
 	export class PHPNull extends makeRegExpClass( /^N;/, input => null ) {
 		constructor() {
-			super( null );
+			super( 2, null );
 		}
 	}
 
 	export type PHPCustomObjectIdentifier = 'C';
-	export class PHPCustomObject {
+	export class PHPCustomObject extends Base {
 
 		static regex = /^C:/;
 
-		constructor( public value: string, public className: string ) { }
+		constructor( public length: number, public value: string, public className: string ) {
+			super();
+		}
 
-		static build( input: string ): [ PHPString, number ] {
+		static build( input: string ): PHPCustomObject {
 
 			const matches = input.match( this.regex );
 
@@ -125,7 +133,7 @@ export namespace PHPTypes {
 				let [ value, valueLength ] = parseFixedLengthString( input.substr( offset ), '{', '}' );
 				offset += valueLength;
 
-				return [ new this( value, className ), offset ];
+				return new this( offset, value, className );
 			} else {
 				throw new Error( 'Failed to parse ' + this.name );
 			}
@@ -134,7 +142,7 @@ export namespace PHPTypes {
 
 	}
 
-	export abstract class MappedData {
+	export abstract class MappedData extends Base {
 
 		static mapRegex = /(\d+):/;
 
@@ -156,11 +164,11 @@ export namespace PHPTypes {
 
 				for ( let i = 0; i < count; i++ ) {
 
-					const [ key, keyLength ] = parse( input.substr( offset ) );
-					offset += keyLength;
+					const key = parse( input.substr( offset ) );
+					offset += key.length;
 
-					const [ value, valueLength ] = parse( input.substr( offset ) );
-					offset += valueLength;
+					const value = parse( input.substr( offset ) );
+					offset += value.length;
 
 					map.set( key, value );
 				}
@@ -185,11 +193,11 @@ export namespace PHPTypes {
 
 		static regex = /^O:/;
 
-		constructor( public value: Map<Types, Types>, public className: string ) {
+		constructor( public length: number, public value: Map<Types, Types>, public className: string ) {
 			super()
 		}
 
-		static build( input: string ): [ PHPObject, number ] {
+		static build( input: string ): PHPObject {
 
 			const matches = input.match( this.regex );
 
@@ -208,7 +216,7 @@ export namespace PHPTypes {
 				const [ value, valueLength ] = this.parseMap( input.substr( offset ) );
 				offset += valueLength;
 
-				return [ new this( value, className ), offset ];
+				return new this( offset, value, className );
 			} else {
 				throw new Error( 'Failed to parse ' + this.name );
 			}
@@ -222,21 +230,21 @@ export namespace PHPTypes {
 
 		static regex = /^a:/;
 
-		constructor( public value: Map<Types, Types> ) {
+		constructor( public length: number, public value: Map<Types, Types> ) {
 			super();
 		}
 
-		static build( input: string ): [ PHPArray, number ] {
+		static build( input: string ): PHPArray {
 
 			const matches = input.match( this.regex );
 
 			if ( matches !== null ) {
 				let offset = matches[ 0 ].length;
 
-				const [ value, valueLength ] = this.parseMap( input.substr( offset ) );
-				offset += valueLength;
+				const [ map, mapLength ] = this.parseMap( input.substr( offset ) );
+				offset += mapLength;
 
-				return [ new this( value ), offset ];
+				return new this( offset, map );
 			} else {
 				throw new Error( 'Failed to parse ' + this.name );
 			}
@@ -246,13 +254,15 @@ export namespace PHPTypes {
 	}
 
 	export type PHPStringIdentifier = 's';
-	export class PHPString {
+	export class PHPString extends Base {
 
 		static regex = /^s:/;
 
-		constructor( public value: string ) { }
+		constructor( public length: number, public value: string ) {
+			super();
+		}
 
-		static build( input: string ): [ PHPString, number ] {
+		static build( input: string ): PHPString {
 
 			const matches = input.match( this.regex );
 
@@ -268,7 +278,7 @@ export namespace PHPTypes {
 					throw new Error( 'Failed to parse ' + this.name );
 				}
 
-				return [ new this( value ), offset ];
+				return new this( offset, value );
 			} else {
 				throw new Error( 'Failed to parse ' + this.name );
 			}
