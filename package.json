@@ -36,6 +36,16 @@
 			"src/**/*.spec.ts"
 		]
 	},
+	"jest": {
+		"preset": "ts-jest",
+		"testEnvironment": "node",
+		"globals": {
+			"ts-jest": {
+				"warnOnly": true,
+				"isolatedModules": true
+			}
+		}
+	},
 	"devDependencies": {
 		"@pika/pack": "^0.5.0",
 		"@pika/plugin-build-node": "^0.9.2",
