@@ -1,7 +1,7 @@
 {
-	"name": "php-serialized-data-js",
+	"name": "php-serialized-data",
 	"version": "1.0.0",
-	"repository": "https://github.com/LachlanArthur/php-serialized-data-js",
+	"repository": "https://github.com/LachlanArthur/php-serialized-data",
 	"author": "LachlanArthur",
 	"license": "MIT",
 	"scripts": {
