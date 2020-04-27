@@ -197,11 +197,22 @@ export namespace PHPTypes {
 
 		}
 
-		toJs() {
+		toJs( exposePrivate = false ) {
 			const output: Record<string, ValueTypes> = {};
 
 			for ( const [ key, value ] of this.value.entries() ) {
-				output[ key.toJs() ] = value.toJs();
+
+				let keyString = key.toJs();
+
+				if ( typeof keyString === 'string' && keyString.charCodeAt( 0 ) === 0 ) {
+					if ( exposePrivate ) {
+						keyString = keyString.replace( /\u0000.+\u0000/, '' );
+					} else {
+						continue;
+					}
+				}
+
+				output[ keyString ] = value.toJs();
 			}
 
 			return output as U;

@@ -111,6 +111,23 @@ describe( 'Object', () => {
 			} );
 	} );
 
+	test( 'Private properties', () => {
+		const value = parse( 'O:8:"stdClass":2:{s:3:"foo";s:3:"bar";s:16:"\u0000stdClass\u0000secret";s:3:"shh";}' );
+		expect( value )
+			.toEqual( new PHPTypes.PHPObject(
+				73,
+				new Map( [
+					[ new PHPTypes.PHPString( 10, 'foo' ), new PHPTypes.PHPString( 10, 'bar' ) ],
+					[ new PHPTypes.PHPString( 24, '\u0000stdClass\u0000secret' ), new PHPTypes.PHPString( 10, 'shh' ) ],
+				] ),
+				'stdClass'
+			) );
+		expect( value.toJs() )
+			.toEqual( { foo: 'bar' } );
+		expect( value.toJs( true ) )
+			.toEqual( { foo: 'bar', secret: 'shh' } );
+	} );
+
 } );
 
 describe( 'Reference', () => {

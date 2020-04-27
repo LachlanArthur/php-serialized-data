@@ -1,8 +1,8 @@
 # php-serialized-data
 
-Parse PHP serialized data with JS
+Parse PHP serialized data with JavaScript.
 
-PHP's `serialize` function doesn't have a spec, so I used the handy [Kaitai Struct spec](https://formats.kaitai.io/php_serialized_value/index.html) as reference instead
+PHP's [serialize function](https://www.php.net/manual/en/function.serialize) doesn't have a spec, so I used the handy [Kaitai Struct spec](https://formats.kaitai.io/php_serialized_value/index.html) as reference instead
 
 ```shell
 yarn add php-serialized-data
@@ -14,20 +14,33 @@ Or use it directly in the browser:
 import { parse } from 'https://cdn.pika.dev/php-serialized-data';
 ```
 
-## Usage
+## Usage Examples
 
 ```js
 import { parse } from 'php-serialized-data';
 
-const data = parse( 'O:8:"stdClass":1:{s:3:"foo";s:3:"bar";}' );
+const data = parse( 'O:8:"stdClass":2:{s:3:"foo";s:3:"bar";s:16:"\u0000stdClass\u0000secret";s:3:"shh";}' );
 
 /*
 PHPObject(
   className: 'stdClass',
   value: Map( [
     [ PHPString( value: 'foo' ), PHPString( value: 'bar' ) ],
+    [ PHPString( value: '\u0000stdClass\u0000secret' ), PHPString( value: 'shh' ) ],
   ] ),
 )
+*/
+
+data.toJs();
+
+/*
+{ foo: 'bar' }
+*/
+
+data.toJs( true ); // Expose private properties
+
+/*
+{ foo: 'bar', secret: 'shh' }
 */
 ```
 
@@ -41,9 +54,23 @@ const data = parse( 's:4:"🐊";' );
 /*
 PHPString( value: '🐊' )
 */
+
+data.toJs();
+
+/*
+'🐊'
+*/
 ```
 
-## Supports
+## JS Value Conversion
+
+Use the `.toJs()` method on the output to convert to native JavaScript types.
+
+Pass `true` to also include private/protected properties.
+
+Note that PHP arrays are transformed into JS objects, as PHP supports non-numeric keys.
+
+## Supports PHP Types
 
 - Null
 - Integer
@@ -65,6 +92,4 @@ PHPString( value: '🐊' )
 
 - Dereference object & value references
   - Also circular references
-- Output conversion to plain JS types
-  - Nulls in private/protected class property names
 - Throw on trailing data
