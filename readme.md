@@ -4,6 +4,16 @@ Parse PHP serialized data with JS
 
 PHP's `serialize` function doesn't have a spec, so I used the handy [Kaitai Struct spec](https://formats.kaitai.io/php_serialized_value/index.html) as reference instead
 
+```shell
+yarn add php-serialized-data
+```
+
+Or use it directly in the browser:
+
+```js
+import { parse } from 'https://cdn.pika.dev/php-serialized-data';
+```
+
 ## Usage
 
 ```js
