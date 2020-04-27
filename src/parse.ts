@@ -16,69 +16,69 @@ export function parse( input: string ): [ PHPTypes.Types, number ] {
 
 }
 
-export namespace PHPTypes {
+export function parseFixedLengthString( input: string, openingDelimiter = '"', closingDelimiter = '"' ): [ string, number ] {
 
-	export function parseFixedLengthString( input: string, openingDelimiter = '"', closingDelimiter = '"' ): [ string, number ] {
+	const bytesRegex = /(\d+):/;
 
-		const bytesRegex = /(\d+):/;
+	const byteCountMatches = input.match( bytesRegex );
 
-		const byteCountMatches = input.match( bytesRegex );
+	if ( byteCountMatches !== null ) {
+		let offset = byteCountMatches[ 0 ].length;
+		const byteCount = parseInt( byteCountMatches[ 1 ] );
 
-		if ( byteCountMatches !== null ) {
-			let offset = byteCountMatches[ 0 ].length;
-			const byteCount = parseInt( byteCountMatches[ 1 ] );
-
-			if ( input.substr( offset, openingDelimiter.length ) === openingDelimiter ) {
-				offset += openingDelimiter.length;
-			} else {
-				throw new Error( 'Failed to parse fixed-length string' );
-			}
-
-			// We need to read bytes manually so the lengths match up with PHP.
-
-			const encoder = new TextEncoder();
-			const decoder = new TextDecoder();
-			const allBytes = encoder.encode( input.substr( offset ) );
-			const valueBytes = allBytes.slice( 0, byteCount );
-			const value = decoder.decode( valueBytes );
-
-			offset += value.length;
-
-			if ( input.substr( offset, closingDelimiter.length ) === closingDelimiter ) {
-				offset += closingDelimiter.length;
-			} else {
-				throw new Error( 'Failed to parse fixed-length string' );
-			}
-
-			return [ value, offset ];
+		if ( input.substr( offset, openingDelimiter.length ) === openingDelimiter ) {
+			offset += openingDelimiter.length;
 		} else {
 			throw new Error( 'Failed to parse fixed-length string' );
 		}
 
+		// We need to read bytes manually so the lengths match up with PHP.
+
+		const encoder = new TextEncoder();
+		const decoder = new TextDecoder();
+		const allBytes = encoder.encode( input.substr( offset ) );
+		const valueBytes = allBytes.slice( 0, byteCount );
+		const value = decoder.decode( valueBytes );
+
+		offset += value.length;
+
+		if ( input.substr( offset, closingDelimiter.length ) === closingDelimiter ) {
+			offset += closingDelimiter.length;
+		} else {
+			throw new Error( 'Failed to parse fixed-length string' );
+		}
+
+		return [ value, offset ];
+	} else {
+		throw new Error( 'Failed to parse fixed-length string' );
 	}
 
-	export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string ) => T ) {
+}
 
-		return class RegExpClass {
+export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string ) => T ) {
 
-			constructor( public value: T ) { }
+	return class RegExpClass {
 
-			static build( input: string ): [ RegExpClass, number ] {
+		constructor( public value: T ) { }
 
-				const matches = input.match( regex );
+		static build( input: string ): [ RegExpClass, number ] {
 
-				if ( matches !== null ) {
-					const value = valueParser( matches[ 1 ] );
-					return [ new this( value ), matches[ 0 ].length ];
-				} else {
-					throw new Error( 'Failed to parse ' + this.name );
-				}
+			const matches = input.match( regex );
 
+			if ( matches !== null ) {
+				const value = valueParser( matches[ 1 ] );
+				return [ new this( value ), matches[ 0 ].length ];
+			} else {
+				throw new Error( 'Failed to parse ' + this.name );
 			}
 
 		}
 
 	}
+
+}
+
+export namespace PHPTypes {
 
 	export type PHPReferenceIdentifier = 'R' | 'r';
 	export class PHPReference extends makeRegExpClass( /^[Rr]:([^;]+);/, input => parseInt( input ) ) { }
@@ -134,7 +134,7 @@ export namespace PHPTypes {
 
 	}
 
-	abstract class MappedData {
+	export abstract class MappedData {
 
 		static mapRegex = /(\d+):/;
 
