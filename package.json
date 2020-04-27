@@ -5,7 +5,7 @@
 	"author": "LachlanArthur",
 	"license": "MIT",
 	"scripts": {
-		"publish-pkg": "pika publish --no-tests",
+		"publish-pkg": "pika publish",
 		"test": "jest",
 		"build": "pika build",
 		"version": "npm run build"
