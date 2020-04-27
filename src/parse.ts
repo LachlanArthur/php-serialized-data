@@ -11,16 +11,16 @@ export function parse( input: string ): PHPTypes.Types {
 	if ( tokenIdentifier in PHPTypes.identifierMap ) {
 		return PHPTypes.identifierMap[ tokenIdentifier ].build( input );
 	} else {
-		throw new Error( `Failed to decode identifier "${tokenIdentifier}".` );
+		throw new Error( `Failed to match identifier "${tokenIdentifier}".` );
 	}
 
 }
 
 export function parseFixedLengthString( input: string, openingDelimiter = '"', closingDelimiter = '"' ): [ string, number ] {
 
-	const bytesRegex = /(\d+):/;
+	const byteCountRegex = /(\d+):/;
 
-	const byteCountMatches = input.match( bytesRegex );
+	const byteCountMatches = input.match( byteCountRegex );
 
 	if ( byteCountMatches !== null ) {
 		let offset = byteCountMatches[ 0 ].length;
@@ -57,7 +57,7 @@ export function parseFixedLengthString( input: string, openingDelimiter = '"', c
 
 export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string ) => T ) {
 
-	return class RegExpClass extends PHPTypes.Base {
+	return class RegExpClass extends PHPTypes.Base<T> {
 
 		constructor( public length: number, public value: T ) {
 			super();
@@ -82,8 +82,16 @@ export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string 
 
 export namespace PHPTypes {
 
-	export abstract class Base {
+	export abstract class Base<T, U = T> {
+
+		abstract value: T;
+
 		abstract length: number;
+
+		toJs() {
+			return this.value as unknown as U;
+		}
+
 	}
 
 	export type PHPReferenceIdentifier = 'R' | 'r';
@@ -106,7 +114,7 @@ export namespace PHPTypes {
 	}
 
 	export type PHPCustomObjectIdentifier = 'C';
-	export class PHPCustomObject extends Base {
+	export class PHPCustomObject extends Base<string> {
 
 		static regex = /^C:/;
 
@@ -142,11 +150,14 @@ export namespace PHPTypes {
 
 	}
 
-	export abstract class MappedData extends Base {
+	export abstract class MappedData<
+		T extends Map<PHPString | PHPInteger, Types> = Map<PHPString | PHPInteger, Types>,
+		U extends Record<string | number, ValueTypes> = Record<string | number, ValueTypes>
+		> extends Base<T, U> {
 
 		static mapRegex = /(\d+):/;
 
-		static parseMap( input: string, openingDelimiter = '{', closingDelimiter = '}' ): [ Map<Types, Types>, number ] {
+		static parseMap<K extends PHPString | PHPInteger = PHPString | PHPInteger>( input: string, openingDelimiter = '{', closingDelimiter = '}' ): [ Map<K, Types>, number ] {
 
 			const countMatches = input.match( this.mapRegex );
 
@@ -160,11 +171,11 @@ export namespace PHPTypes {
 					throw new Error( 'Failed to parse ' + this.name );
 				}
 
-				const map: Map<Types, Types> = new Map();
+				const map: Map<K, Types> = new Map();
 
 				for ( let i = 0; i < count; i++ ) {
 
-					const key = parse( input.substr( offset ) );
+					const key = parse( input.substr( offset ) ) as unknown as K;
 					offset += key.length;
 
 					const value = parse( input.substr( offset ) );
@@ -186,6 +197,16 @@ export namespace PHPTypes {
 
 		}
 
+		toJs() {
+			const output: Record<string, ValueTypes> = {};
+
+			for ( const [ key, value ] of this.value.entries() ) {
+				output[ key.toJs() ] = value.toJs();
+			}
+
+			return output as U;
+		}
+
 	}
 
 	export type PHPObjectIdentifier = 'O';
@@ -193,7 +214,7 @@ export namespace PHPTypes {
 
 		static regex = /^O:/;
 
-		constructor( public length: number, public value: Map<Types, Types>, public className: string ) {
+		constructor( public length: number, public value: Map<PHPString, Types>, public className: string ) {
 			super()
 		}
 
@@ -213,7 +234,7 @@ export namespace PHPTypes {
 					throw new Error( 'Failed to parse ' + this.name );
 				}
 
-				const [ value, valueLength ] = this.parseMap( input.substr( offset ) );
+				const [ value, valueLength ] = this.parseMap<PHPString>( input.substr( offset ) );
 				offset += valueLength;
 
 				return new this( offset, value, className );
@@ -230,7 +251,7 @@ export namespace PHPTypes {
 
 		static regex = /^a:/;
 
-		constructor( public length: number, public value: Map<Types, Types> ) {
+		constructor( public length: number, public value: Map<PHPString | PHPInteger, Types> ) {
 			super();
 		}
 
@@ -254,7 +275,7 @@ export namespace PHPTypes {
 	}
 
 	export type PHPStringIdentifier = 's';
-	export class PHPString extends Base {
+	export class PHPString extends Base<string> {
 
 		static regex = /^s:/;
 
@@ -306,6 +327,15 @@ export namespace PHPTypes {
 		| typeof PHPBoolean
 		| typeof PHPFloat
 		| typeof PHPInteger;
+
+	export type ValueTypes = { [ key in string | number ]: ValueTypes }
+		| PHPCustomObject[ 'value' ]
+		| PHPNull[ 'value' ]
+		| PHPReference[ 'value' ]
+		| PHPString[ 'value' ]
+		| PHPBoolean[ 'value' ]
+		| PHPFloat[ 'value' ]
+		| PHPInteger[ 'value' ];
 
 	export type Identifiers = PHPCustomObjectIdentifier
 		| PHPNullIdentifier
