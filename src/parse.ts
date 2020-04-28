@@ -197,22 +197,38 @@ export namespace PHPTypes {
 
 		}
 
-		toJs( exposePrivate = false ) {
+		toJs( options: Partial<ToJsOptions> = {} ) {
 			const output: Record<string, ValueTypes> = {};
+			const outputArray: ValueTypes[] = [];
 
-			for ( const [ key, value ] of this.value.entries() ) {
+			let isNumericArray = this instanceof PHPArray;
 
-				let keyString = key.toJs();
+			for ( const [ PHPKey, PHPValue ] of this.value.entries() ) {
 
-				if ( typeof keyString === 'string' && keyString.charCodeAt( 0 ) === 0 ) {
-					if ( exposePrivate ) {
-						keyString = keyString.replace( /\u0000.+\u0000/, '' );
+				let key = PHPKey.toJs();
+				let value = PHPValue.toJs( options );
+
+				if ( typeof key === 'string' && key.charCodeAt( 0 ) === 0 ) {
+					if ( options.private ) {
+						key = key.replace( /\u0000.+\u0000/, '' );
 					} else {
 						continue;
 					}
 				}
 
-				output[ keyString ] = value.toJs();
+				if ( options.detectArrays && isNumericArray ) {
+					if ( PHPKey instanceof PHPInteger ) {
+						outputArray[ key as number ] = value;
+					} else {
+						isNumericArray = false;
+					}
+				}
+
+				output[ key ] = value;
+			}
+
+			if ( options.detectArrays && isNumericArray ) {
+				return outputArray as unknown as U;
 			}
 
 			return output as U;
@@ -375,5 +391,10 @@ export namespace PHPTypes {
 		r: PHPReference,
 		s: PHPString,
 	} );
+
+	export type ToJsOptions = {
+		private: boolean,
+		detectArrays: boolean,
+	};
 
 }

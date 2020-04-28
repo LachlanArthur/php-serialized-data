@@ -124,7 +124,7 @@ describe( 'Object', () => {
 			) );
 		expect( value.toJs() )
 			.toEqual( { foo: 'bar' } );
-		expect( value.toJs( true ) )
+		expect( value.toJs( { private: true } ) )
 			.toEqual( { foo: 'bar', secret: 'shh' } );
 	} );
 
@@ -203,6 +203,8 @@ describe( 'Array', () => {
 			.toEqual( new PHPTypes.PHPArray( 6, new Map( [] ) ) );
 		expect( value.toJs() )
 			.toEqual( {} );
+		expect( value.toJs( { detectArrays: true } ) )
+			.toEqual( [] );
 	} );
 
 	test( 'Simple', () => {
@@ -217,6 +219,11 @@ describe( 'Array', () => {
 				0: 'foo',
 				1: 'bar',
 			} );
+		expect( value.toJs( { detectArrays: true } ) )
+			.toEqual( [
+				'foo',
+				'bar',
+			] );
 	} );
 
 	test( 'Nested', () => {
@@ -235,18 +242,27 @@ describe( 'Array', () => {
 				0: { 0: 'foo' },
 				1: { 0: 'bar' },
 			} );
+		expect( value.toJs( { detectArrays: true } ) )
+			.toEqual( [
+				[ 'foo' ],
+				[ 'bar' ],
+			] );
 	} );
 
 	test( 'Sparse', () => {
-		const value = parse( 'a:1:{i:100;s:3:"foo";}' );
+		const value = parse( 'a:1:{i:10;s:3:"foo";}' );
 		expect( value )
-			.toEqual( new PHPTypes.PHPArray( 22, new Map( [
-				[ new PHPTypes.PHPInteger( 6, 100 ), new PHPTypes.PHPString( 10, 'foo' ) ],
+			.toEqual( new PHPTypes.PHPArray( 21, new Map( [
+				[ new PHPTypes.PHPInteger( 5, 10 ), new PHPTypes.PHPString( 10, 'foo' ) ],
 			] ) ) );
 		expect( value.toJs() )
 			.toEqual( {
-				100: 'foo',
+				10: 'foo',
 			} );
+		const sparseResult = [];
+		sparseResult[ 10 ] = 'foo';
+		expect( value.toJs( { detectArrays: true } ) )
+			.toEqual( sparseResult );
 	} );
 
 } );

@@ -37,7 +37,7 @@ data.toJs();
 { foo: 'bar' }
 */
 
-data.toJs( true ); // Expose private properties
+data.toJs( { private: true } );
 
 /*
 { foo: 'bar', secret: 'shh' }
@@ -66,9 +66,16 @@ data.toJs();
 
 Use the `.toJs()` method on the output to convert to native JavaScript types.
 
-Pass `true` to also include private/protected properties.
+```js
+value.toJs( options? )
+```
 
-Note that PHP arrays are transformed into JS objects, as PHP supports non-numeric keys.
+The `.toJs()` method accepts an options object:
+
+|Option|Type|Default|Description|
+|---|---|---|---|
+|`private`|Boolean|`false`|Include private & protected class properties|
+|`detectArrays`|Boolean|`false`|Output arrays where possible, instead of objects|
 
 ## Supports PHP Types
 
