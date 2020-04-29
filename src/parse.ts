@@ -1,4 +1,4 @@
-export function parse( input: string ): PHPTypes.Types {
+export function parse( input: string ): PHPTypes.AllTypes {
 
 	if ( typeof input !== 'string' ) {
 		throw new TypeError( 'Input must be a string' );
@@ -57,11 +57,9 @@ export function parseFixedLengthString( input: string, openingDelimiter = '"', c
 
 export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string ) => T ) {
 
-	return class RegExpClass extends PHPTypes.Base<T> {
+	return class RegExpClass {
 
-		constructor( public length: number, public value: T ) {
-			super();
-		}
+		constructor( public length: number, public value: T ) { }
 
 		static build( input: string ): RegExpClass {
 
@@ -76,51 +74,41 @@ export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string 
 
 		}
 
+		toJs() {
+			return this.value as T;
+		}
+
 	}
 
 }
 
 export namespace PHPTypes {
 
-	export abstract class Base<T, U = T> {
-
-		abstract value: T;
-
-		abstract length: number;
-
-		toJs() {
-			return this.value as unknown as U;
-		}
-
-	}
-
 	export type PHPReferenceIdentifier = 'R' | 'r';
-	export class PHPReference extends makeRegExpClass( /^[Rr]:([^;]+);/, input => parseInt( input ) ) { }
+	export class PHPReference extends makeRegExpClass<number>( /^[Rr]:([^;]+);/, input => parseInt( input ) ) { }
 
 	export type PHPBooleanIdentifier = 'b';
-	export class PHPBoolean extends makeRegExpClass( /^b:([01]);/, input => Boolean( parseInt( input ) ) ) { }
+	export class PHPBoolean extends makeRegExpClass<boolean>( /^b:([01]);/, input => Boolean( parseInt( input ) ) ) { }
 
 	export type PHPFloatIdentifier = 'd';
-	export class PHPFloat extends makeRegExpClass( /^d:([^;]+);/, input => parseFloat( input.replace( 'INF', 'Infinity' ) ) ) { }
+	export class PHPFloat extends makeRegExpClass<number>( /^d:([^;]+);/, input => parseFloat( input.replace( 'INF', 'Infinity' ) ) ) { }
 
 	export type PHPIntegerIdentifier = 'i';
-	export class PHPInteger extends makeRegExpClass( /^i:([^;]+);/, input => parseInt( input ) ) { }
+	export class PHPInteger extends makeRegExpClass<number>( /^i:([^;]+);/, input => parseInt( input ) ) { }
 
 	export type PHPNullIdentifier = 'N';
-	export class PHPNull extends makeRegExpClass( /^N;/, input => null ) {
+	export class PHPNull extends makeRegExpClass<null>( /^N;/, input => null ) {
 		constructor() {
 			super( 2, null );
 		}
 	}
 
 	export type PHPCustomObjectIdentifier = 'C';
-	export class PHPCustomObject extends Base<string> {
+	export class PHPCustomObject {
 
 		static regex = /^C:/;
 
-		constructor( public length: number, public value: string, public className: string ) {
-			super();
-		}
+		constructor( public length: number, public value: string, public className: string ) { }
 
 		static build( input: string ): PHPCustomObject {
 
@@ -148,16 +136,17 @@ export namespace PHPTypes {
 
 		}
 
+		toJs() {
+			return this.value;
+		}
+
 	}
 
-	export abstract class MappedData<
-		T extends Map<PHPString | PHPInteger, Types> = Map<PHPString | PHPInteger, Types>,
-		U extends Record<string | number, ValueTypes> = Record<string | number, ValueTypes>
-		> extends Base<T, U> {
+	export abstract class MappedData {
 
 		static mapRegex = /(\d+):/;
 
-		static parseMap<K extends PHPString | PHPInteger = PHPString | PHPInteger>( input: string, openingDelimiter = '{', closingDelimiter = '}' ): [ Map<K, Types>, number ] {
+		static parseMap<K extends PHPString | PHPInteger>( input: string, openingDelimiter = '{', closingDelimiter = '}' ): [ Map<K, AllTypes>, number ] {
 
 			const countMatches = input.match( this.mapRegex );
 
@@ -171,7 +160,7 @@ export namespace PHPTypes {
 					throw new Error( 'Failed to parse ' + this.name );
 				}
 
-				const map: Map<K, Types> = new Map();
+				const map: Map<K, AllTypes> = new Map();
 
 				for ( let i = 0; i < count; i++ ) {
 
@@ -197,43 +186,6 @@ export namespace PHPTypes {
 
 		}
 
-		toJs( options: Partial<ToJsOptions> = {} ) {
-			const output: Record<string, ValueTypes> = {};
-			const outputArray: ValueTypes[] = [];
-
-			let isNumericArray = this instanceof PHPArray;
-
-			for ( const [ PHPKey, PHPValue ] of this.value.entries() ) {
-
-				let key = PHPKey.toJs();
-				let value = PHPValue.toJs( options );
-
-				if ( typeof key === 'string' && key.charCodeAt( 0 ) === 0 ) {
-					if ( options.private ) {
-						key = key.replace( /\u0000.+\u0000/, '' );
-					} else {
-						continue;
-					}
-				}
-
-				if ( options.detectArrays && isNumericArray ) {
-					if ( PHPKey instanceof PHPInteger ) {
-						outputArray[ key as number ] = value;
-					} else {
-						isNumericArray = false;
-					}
-				}
-
-				output[ key ] = value;
-			}
-
-			if ( options.detectArrays && isNumericArray ) {
-				return outputArray as unknown as U;
-			}
-
-			return output as U;
-		}
-
 	}
 
 	export type PHPObjectIdentifier = 'O';
@@ -241,7 +193,7 @@ export namespace PHPTypes {
 
 		static regex = /^O:/;
 
-		constructor( public length: number, public value: Map<PHPString, Types>, public className: string ) {
+		constructor( public length: number, public value: Map<PHPString, AllTypes>, public className: string ) {
 			super()
 		}
 
@@ -271,6 +223,28 @@ export namespace PHPTypes {
 
 		}
 
+		toJs( options: Partial<ToJsOptions> = {} ): Record<string, ValueTypes> {
+			const output: Record<string, ValueTypes> = {};
+
+			for ( const [ PHPKey, PHPValue ] of this.value.entries() ) {
+
+				let key = PHPKey.toJs();
+				let value = PHPValue.toJs( options );
+
+				if ( typeof key === 'string' && key.charCodeAt( 0 ) === 0 ) {
+					if ( options.private ) {
+						key = key.replace( /\u0000.+\u0000/, '' );
+					} else {
+						continue;
+					}
+				}
+
+				output[ key ] = value;
+			}
+
+			return output;
+		}
+
 	}
 
 	export type PHPArrayIdentifier = 'a';
@@ -278,7 +252,7 @@ export namespace PHPTypes {
 
 		static regex = /^a:/;
 
-		constructor( public length: number, public value: Map<PHPString | PHPInteger, Types> ) {
+		constructor( public length: number, public value: Map<PHPString | PHPInteger, AllTypes> ) {
 			super();
 		}
 
@@ -299,16 +273,48 @@ export namespace PHPTypes {
 
 		}
 
+		toJs( options: Partial<ToJsOptions> = {} ): ValueTypes[] | Record<string, ValueTypes> {
+
+			// Borrow the toJs method from PHPObject, then attempt to convert the result to an array.
+
+			const outputObject: Record<string, ValueTypes> = PHPObject.prototype.toJs.call( this, options );
+
+			if ( options.detectArrays ) {
+
+				const outputArray: ValueTypes[] = [];
+
+				const stringKeys: string[] = Object.keys( outputObject );
+				const numberKeys: number[] = [];
+
+				if ( stringKeys.length === 0 ) return [];
+
+				const allKeysAreNumbers = stringKeys.every( stringKey => {
+					const numberKey = parseInt( stringKey );
+					numberKeys.push( numberKey );
+					return numberKey.toString() === stringKey;
+				} );
+
+				if ( allKeysAreNumbers ) {
+					for ( const numberKey of numberKeys ) {
+						outputArray[ numberKey ] = outputObject[ numberKey ];
+					}
+					return outputArray;
+				}
+
+			}
+
+			return outputObject;
+
+		}
+
 	}
 
 	export type PHPStringIdentifier = 's';
-	export class PHPString extends Base<string> {
+	export class PHPString {
 
 		static regex = /^s:/;
 
-		constructor( public length: number, public value: string ) {
-			super();
-		}
+		constructor( public length: number, public value: string ) { }
 
 		static build( input: string ): PHPString {
 
@@ -333,9 +339,13 @@ export namespace PHPTypes {
 
 		}
 
+		toJs() {
+			return this.value;
+		}
+
 	}
 
-	export type Types = PHPCustomObject
+	export type AllTypes = PHPCustomObject
 		| PHPNull
 		| PHPObject
 		| PHPReference
@@ -345,7 +355,7 @@ export namespace PHPTypes {
 		| PHPFloat
 		| PHPInteger;
 
-	export type TypeClasses = typeof PHPCustomObject
+	export type AllTypeClasses = typeof PHPCustomObject
 		| typeof PHPNull
 		| typeof PHPObject
 		| typeof PHPReference
@@ -356,6 +366,7 @@ export namespace PHPTypes {
 		| typeof PHPInteger;
 
 	export type ValueTypes = { [ key in string | number ]: ValueTypes }
+		| ValueTypes[]
 		| PHPCustomObject[ 'value' ]
 		| PHPNull[ 'value' ]
 		| PHPReference[ 'value' ]
@@ -374,7 +385,7 @@ export namespace PHPTypes {
 		| PHPFloatIdentifier
 		| PHPIntegerIdentifier;
 
-	function createIdentifierMap<T extends Record<Identifiers, V>, V extends TypeClasses>( map: T ) {
+	function createIdentifierMap<T extends Record<Identifiers, V>, V extends AllTypeClasses>( map: T ) {
 		return map;
 	}
 
