@@ -92,11 +92,11 @@ The `.toJs()` method accepts an options object:
 - Object
   - Classes
   - Custom Objects (contain arbitrary serialized data. e.g. `SplDoublyLinkedList`)
-- Object Reference
-- Value Reference
+- Reference
+  - Value Reference
+  - Object Reference
+  - Circular Reference
 
 ## TODO
 
-- Dereference object & value references
-  - Also circular references
 - Throw on trailing data

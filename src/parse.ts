@@ -1,4 +1,6 @@
-export function parse( input: string ): PHPTypes.AllTypes {
+let objectReferences: any[] = [ null ]; // 1-indexed
+
+export function parse( input: string, resetReferences = true ) {
 
 	if ( typeof input !== 'string' ) {
 		throw new TypeError( 'Input must be a string' );
@@ -8,11 +10,63 @@ export function parse( input: string ): PHPTypes.AllTypes {
 
 	const tokenIdentifier = input.substr( 0, 1 ) as PHPTypes.Identifiers;
 
+	if ( resetReferences ) {
+		objectReferences = [ null ];
+	}
+
 	if ( tokenIdentifier in PHPTypes.identifierMap ) {
 		return PHPTypes.identifierMap[ tokenIdentifier ].build( input );
 	} else {
 		throw new Error( `Failed to match identifier "${tokenIdentifier}".` );
 	}
+
+}
+
+export function toJs(
+	object: PHPTypes.AllTypes,
+	options: Partial<PHPTypes.ToJsOptions> = {},
+	seen: WeakMap<PHPTypes.AllTypes, any> = new WeakMap()
+): PHPTypes.ValueTypes {
+
+	if ( !object || typeof object !== 'object' ) return object;
+
+	const objectClass = object.constructor as PHPTypes.AllTypeClasses;
+
+	if ( ! Object.values( PHPTypes.identifierMap ).includes( objectClass ) ) {
+		return object as any;
+	}
+
+	if ( object instanceof PHPTypes.PHPReference ) {
+		object = object.value;
+	}
+
+	if ( seen.has( object ) ) {
+		return seen.get( object )!;
+	}
+
+	const jsValue = objectClass.toJs( object as any, options );
+
+	seen.set( object, jsValue );
+
+	if ( object instanceof PHPTypes.PHPArray && options.detectArrays ) {
+
+		const arrayValue = jsValue as PHPTypes.AllTypes[];
+
+		for ( let i = 0; i < arrayValue.length; i++ ) {
+			( jsValue as any )[ i ] = toJs( arrayValue[ i ] as PHPTypes.AllTypes, options, seen );
+		}
+
+	} else if ( object instanceof PHPTypes.PHPArray || object instanceof PHPTypes.PHPObject ) {
+
+		const objectValue = jsValue as Record<string, PHPTypes.AllTypes>;
+
+		for ( let [ key, value ] of Object.entries( objectValue ) ) {
+			( jsValue as any )[ key ] = toJs( value, options, seen );
+		}
+
+	}
+
+	return jsValue as any;
 
 }
 
@@ -59,7 +113,9 @@ export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string 
 
 	return class RegExpClass {
 
-		constructor( public length: number, public value: T ) { }
+		constructor( public length: number, public value: T ) {
+			objectReferences.push( this );
+		}
 
 		static build( input: string ): RegExpClass {
 
@@ -75,7 +131,11 @@ export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string 
 		}
 
 		toJs() {
-			return this.value as T;
+			return RegExpClass.toJs( this );
+		}
+
+		static toJs( instance: RegExpClass ) {
+			return instance.value as T;
 		}
 
 	}
@@ -85,7 +145,45 @@ export function makeRegExpClass<T>( regex: RegExp, valueParser: ( input: string 
 export namespace PHPTypes {
 
 	export type PHPReferenceIdentifier = 'R' | 'r';
-	export class PHPReference extends makeRegExpClass<number>( /^[Rr]:([^;]+);/, input => parseInt( input ) ) { }
+	export class PHPReference {
+
+		static regex = /^[Rr]:([^;]+);/;
+
+		constructor( public length: number, public value: AllTypes ) { }
+
+		static build( input: string ): PHPReference {
+
+			const matches = input.match( this.regex );
+
+			if ( matches !== null ) {
+				const value = parseInt( matches[ 1 ] );
+
+				if ( !( value in objectReferences ) ) {
+					throw new Error( 'Invalid Reference' );
+				}
+
+				const object = objectReferences[ value ];
+
+				if ( object instanceof PHPReference ) {
+					throw new Error( 'Invalid Reference' );
+				}
+
+				return new this( matches[ 0 ].length, object );
+			} else {
+				throw new Error( 'Failed to parse PHPReference' );
+			}
+
+		}
+
+		toJs( options: Partial<ToJsOptions> = {} ) {
+			return PHPReference.toJs( this, options );
+		}
+
+		static toJs( instance: PHPReference, options: Partial<ToJsOptions> = {} ) {
+			return toJs( instance.value, options );
+		}
+
+	}
 
 	export type PHPBooleanIdentifier = 'b';
 	export class PHPBoolean extends makeRegExpClass<boolean>( /^b:([01]);/, input => Boolean( parseInt( input ) ) ) { }
@@ -108,7 +206,9 @@ export namespace PHPTypes {
 
 		static regex = /^C:/;
 
-		constructor( public length: number, public value: string, public className: string ) { }
+		constructor( public length: number, public value: string, public className: string ) {
+			objectReferences.push( this );
+		}
 
 		static build( input: string ): PHPCustomObject {
 
@@ -137,7 +237,11 @@ export namespace PHPTypes {
 		}
 
 		toJs() {
-			return this.value;
+			return toJs( this ) as string;
+		}
+
+		static toJs( instance: PHPCustomObject ) {
+			return instance.value;
 		}
 
 	}
@@ -164,10 +268,13 @@ export namespace PHPTypes {
 
 				for ( let i = 0; i < count; i++ ) {
 
-					const key = parse( input.substr( offset ) ) as unknown as K;
+					const key = parse( input.substr( offset ), false ) as unknown as K;
 					offset += key.length;
 
-					const value = parse( input.substr( offset ) );
+					// Keys cannot be referenced
+					objectReferences.pop();
+
+					const value = parse( input.substr( offset ), false );
 					offset += value.length;
 
 					map.set( key, value );
@@ -194,7 +301,9 @@ export namespace PHPTypes {
 		static regex = /^O:/;
 
 		constructor( public length: number, public value: Map<PHPString, AllTypes>, public className: string ) {
-			super()
+			super();
+
+			objectReferences.push( this );
 		}
 
 		static build( input: string ): PHPObject {
@@ -213,23 +322,42 @@ export namespace PHPTypes {
 					throw new Error( 'Failed to parse ' + this.name );
 				}
 
-				const [ value, valueLength ] = this.parseMap<PHPString>( input.substr( offset ) );
+				const instance = new this( offset, new Map(), className );
+
+				const [ map, valueLength ] = this.parseMap<PHPString>( input.substr( offset ) );
 				offset += valueLength;
 
-				return new this( offset, value, className );
+				instance.length = offset;
+				instance.value = map;
+
+				return instance;
+
 			} else {
 				throw new Error( 'Failed to parse ' + this.name );
 			}
 
 		}
 
-		toJs( options: Partial<ToJsOptions> = {} ): Record<string, ValueTypes> {
-			const output: Record<string, ValueTypes> = {};
+		protected jsValue: Record<string, Record<string, AllTypes>> = {};
 
-			for ( const [ PHPKey, PHPValue ] of this.value.entries() ) {
+		toJs( options: Partial<ToJsOptions> = {} ) {
+			return toJs( this, options ) as Record<string, ValueTypes>;
+		}
+
+		static toJs( instance: PHPObject, options: Partial<ToJsOptions> = {} ): Record<string, AllTypes> {
+
+			const optionsHash = JSON.stringify( options );
+			const cached = instance.jsValue[ optionsHash ];
+
+			if ( cached ) {
+				return cached;
+			}
+
+			const output: Record<string, AllTypes> = {};
+
+			for ( const [ PHPKey, PHPValue ] of instance.value.entries() ) {
 
 				let key = PHPKey.toJs();
-				let value = PHPValue.toJs( options );
 
 				if ( typeof key === 'string' && key.charCodeAt( 0 ) === 0 ) {
 					if ( options.private ) {
@@ -239,8 +367,10 @@ export namespace PHPTypes {
 					}
 				}
 
-				output[ key ] = value;
+				output[ key ] = PHPValue;
 			}
+
+			instance.jsValue[ optionsHash ] = output;
 
 			return output;
 		}
@@ -254,6 +384,8 @@ export namespace PHPTypes {
 
 		constructor( public length: number, public value: Map<PHPString | PHPInteger, AllTypes> ) {
 			super();
+
+			objectReferences.push( this );
 		}
 
 		static build( input: string ): PHPArray {
@@ -263,25 +395,44 @@ export namespace PHPTypes {
 			if ( matches !== null ) {
 				let offset = matches[ 0 ].length;
 
+				const instance = new this( offset, new Map() );
+
 				const [ map, mapLength ] = this.parseMap( input.substr( offset ) );
 				offset += mapLength;
 
-				return new this( offset, map );
+				instance.length = offset;
+				instance.value = map;
+
+				return instance;
+
 			} else {
 				throw new Error( 'Failed to parse ' + this.name );
 			}
 
 		}
 
-		toJs( options: Partial<ToJsOptions> = {} ): ValueTypes[] | Record<string, ValueTypes> {
+		protected jsValue: Record<string, ( AllTypes[] | Record<string, AllTypes> )> = {};
+
+		toJs( options: Partial<ToJsOptions> = {} ) {
+			return toJs( this, options ) as ValueTypes[] | Record<string, ValueTypes>;
+		}
+
+		static toJs( instance: PHPArray, options: Partial<ToJsOptions> = {} ): AllTypes[] | Record<string, AllTypes> {
+
+			const optionsHash = JSON.stringify( options );
+			const cached = instance.jsValue[ optionsHash ];
+
+			if ( cached ) {
+				return cached;
+			}
 
 			// Borrow the toJs method from PHPObject, then attempt to convert the result to an array.
 
-			const outputObject: Record<string, ValueTypes> = PHPObject.prototype.toJs.call( this, options );
+			const outputObject: Record<string, AllTypes> = PHPObject.toJs( instance as any, options );
 
 			if ( options.detectArrays ) {
 
-				const outputArray: ValueTypes[] = [];
+				const outputArray: AllTypes[] = [];
 
 				const stringKeys: string[] = Object.keys( outputObject );
 				const numberKeys: number[] = [];
@@ -298,10 +449,13 @@ export namespace PHPTypes {
 					for ( const numberKey of numberKeys ) {
 						outputArray[ numberKey ] = outputObject[ numberKey ];
 					}
+					instance.jsValue[ optionsHash ] = outputArray;
 					return outputArray;
 				}
 
 			}
+
+			instance.jsValue[ optionsHash ] = outputObject;
 
 			return outputObject;
 
@@ -314,7 +468,9 @@ export namespace PHPTypes {
 
 		static regex = /^s:/;
 
-		constructor( public length: number, public value: string ) { }
+		constructor( public length: number, public value: string ) {
+			objectReferences.push( this );
+		}
 
 		static build( input: string ): PHPString {
 
@@ -340,7 +496,11 @@ export namespace PHPTypes {
 		}
 
 		toJs() {
-			return this.value;
+			return PHPString.toJs( this );
+		}
+
+		static toJs( instance: PHPString ) {
+			return instance.value;
 		}
 
 	}
@@ -369,7 +529,6 @@ export namespace PHPTypes {
 		| ValueTypes[]
 		| PHPCustomObject[ 'value' ]
 		| PHPNull[ 'value' ]
-		| PHPReference[ 'value' ]
 		| PHPString[ 'value' ]
 		| PHPBoolean[ 'value' ]
 		| PHPFloat[ 'value' ]

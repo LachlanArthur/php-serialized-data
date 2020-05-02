@@ -132,12 +132,85 @@ describe( 'Object', () => {
 
 describe( 'Reference', () => {
 
-	test( 'Reference', () => {
-		const value = parse( 'R:1;' );
+	test( 'Value', () => {
+		const value = parse( 'a:2:{i:0;s:3:"foo";i:1;R:2;}' );
+		let references: PHPTypes.AllTypes[] = [];
 		expect( value )
-			.toEqual( new PHPTypes.PHPReference( 4, 1 ) );
-		expect( value.toJs() )
-			.toBe( 1 );
+			.toEqual( new PHPTypes.PHPArray( 28, new Map<PHPTypes.PHPInteger | PHPTypes.PHPString, PHPTypes.AllTypes>( [
+				[ new PHPTypes.PHPInteger( 4, 0 ), ( references[ 2 ] = new PHPTypes.PHPString( 10, 'foo' ) ) ],
+				[ new PHPTypes.PHPInteger( 4, 1 ), new PHPTypes.PHPReference( 4, references[ 2 ] ) ],
+			] ) ) );
+		expect( value.toJs( { detectArrays: true } ) )
+			.toEqual( [ 'foo', 'foo' ] );
+	} );
+
+	test( 'Object', () => {
+		const value = parse( 'a:2:{i:0;O:8:"stdClass":1:{s:3:"foo";s:3:"bar";}i:1;R:2;}' );
+		let references: PHPTypes.AllTypes[] = [];
+		expect( value )
+			.toEqual( new PHPTypes.PHPArray( 57, new Map<PHPTypes.PHPInteger | PHPTypes.PHPString, PHPTypes.AllTypes>( [
+				[ new PHPTypes.PHPInteger( 4, 0 ), ( references[ 2 ] = new PHPTypes.PHPObject( 39, new Map<PHPTypes.PHPString, PHPTypes.AllTypes>( [
+					[ new PHPTypes.PHPString( 10, 'foo' ), new PHPTypes.PHPString( 10, 'bar' ) ]
+				] ), 'stdClass' ) ) ],
+				[ new PHPTypes.PHPInteger( 4, 1 ), new PHPTypes.PHPReference( 4, references[ 2 ] ) ],
+			] ) ) );
+
+		const obj = { foo: 'bar' };
+		const result = [ obj, obj ];
+
+		const js = value.toJs( { detectArrays: true } );
+
+		expect( js )
+			.toEqual( result );
+
+		expect( js[ 0 ] )
+			.toBe( js[ 1 ] );
+	} );
+
+	test( 'Circular', () => {
+		const value = parse( 'a:2:{i:0;O:8:"stdClass":1:{s:1:"b";O:8:"stdClass":1:{s:1:"a";R:2;}}i:1;r:3;}' );
+		let references: PHPTypes.AllTypes[] = [];
+
+		references[ 2 ] = new PHPTypes.PHPObject( 58, new Map<PHPTypes.PHPString, PHPTypes.AllTypes>( [] ), 'stdClass' );
+		references[ 3 ] = new PHPTypes.PHPObject( 31, new Map<PHPTypes.PHPString, PHPTypes.AllTypes>( [] ), 'stdClass' );
+
+		references[ 2 ].value.set( new PHPTypes.PHPString( 8, 'b' ), references[ 3 ] );
+		references[ 3 ].value.set( new PHPTypes.PHPString( 8, 'a' ), new PHPTypes.PHPReference( 4, references[ 2 ] ) );
+
+		const circular = new PHPTypes.PHPArray( 76, new Map<PHPTypes.PHPInteger | PHPTypes.PHPString, PHPTypes.AllTypes>( [
+			[ new PHPTypes.PHPInteger( 4, 0 ), references[ 2 ] ],
+			[ new PHPTypes.PHPInteger( 4, 1 ), new PHPTypes.PHPReference( 4, references[ 3 ] ) ],
+		] ) );
+
+		expect( value )
+			.toEqual( circular );
+
+		const resultA: any = {};
+		const resultB: any = {};
+		resultA.b = resultB;
+		resultB.a = resultA;
+		const result = [ resultA, resultB ];
+
+		const js = value.toJs( { detectArrays: true } );
+
+		expect( js )
+			.toEqual( result );
+
+		expect( js[ 0 ].b )
+			.toBe( js[ 1 ] );
+
+		expect( js[ 1 ].a )
+			.toBe( js[ 0 ] );
+	} );
+
+	test( 'Bare Reference', () => {
+		expect( () => parse( 'R:1;' ) )
+			.toThrowError( 'Invalid Reference' );
+	} );
+
+	test( 'Invalid Reference', () => {
+		expect( () => parse( 'a:2:{i:0;s:3:"foo";i:1;R:5;}' ) )
+			.toThrowError( 'Invalid Reference' );
 	} );
 
 	test( 'Non-matching regex', () => {
