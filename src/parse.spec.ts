@@ -111,13 +111,14 @@ describe( 'Object', () => {
 			} );
 	} );
 
-	test( 'Private properties', () => {
-		const value = parse( 'O:8:"stdClass":2:{s:3:"foo";s:3:"bar";s:16:"\u0000stdClass\u0000secret";s:3:"shh";}' );
+	test( 'Private/protected properties', () => {
+		const value = parse( 'O:8:"stdClass":3:{s:3:"foo";s:3:"bar";s:9:"\u0000*\u0000locked";s:9:"\u0000lambda_1";s:16:"\u0000stdClass\u0000secret";s:3:"shh";}' );
 		expect( value )
 			.toEqual( new PHPTypes.PHPObject(
-				73,
+				105,
 				new Map( [
 					[ new PHPTypes.PHPString( 10, 'foo' ), new PHPTypes.PHPString( 10, 'bar' ) ],
+					[ new PHPTypes.PHPString( 16, '\u0000*\u0000locked' ), new PHPTypes.PHPString( 16, '\u0000lambda_1' ) ],
 					[ new PHPTypes.PHPString( 24, '\u0000stdClass\u0000secret' ), new PHPTypes.PHPString( 10, 'shh' ) ],
 				] ),
 				'stdClass'
@@ -125,7 +126,43 @@ describe( 'Object', () => {
 		expect( value.toJs() )
 			.toEqual( { foo: 'bar' } );
 		expect( value.toJs( { private: true } ) )
-			.toEqual( { foo: 'bar', secret: 'shh' } );
+			.toEqual( { foo: 'bar', locked: 'lambda_1', secret: 'shh' } );
+	} );
+
+	test( 'Private/protected properties - replaced nulls', () => {
+		const value = parse( 'O:8:"stdClass":3:{s:3:"foo";s:3:"bar";s:9:"\ufffd*\ufffdlocked";s:9:"\ufffdlambda_1";s:16:"\ufffdstdClass\ufffdsecret";s:3:"shh";}', { fixNulls: true } );
+		expect( value )
+			.toEqual( new PHPTypes.PHPObject(
+				105,
+				new Map( [
+					[ new PHPTypes.PHPString( 10, 'foo' ), new PHPTypes.PHPString( 10, 'bar' ) ],
+					[ new PHPTypes.PHPString( 16, '\u0000*\u0000locked' ), new PHPTypes.PHPString( 16, '\u0000lambda_1' ) ],
+					[ new PHPTypes.PHPString( 24, '\u0000stdClass\u0000secret' ), new PHPTypes.PHPString( 10, 'shh' ) ],
+				] ),
+				'stdClass'
+			) );
+		expect( value.toJs() )
+			.toEqual( { foo: 'bar' } );
+		expect( value.toJs( { private: true } ) )
+			.toEqual( { foo: 'bar', locked: 'lambda_1', secret: 'shh' } );
+	} );
+
+	test( 'Private/protected properties - missing nulls', () => {
+		const value = parse( 'O:8:"stdClass":3:{s:3:"foo";s:3:"bar";s:9:"*locked";s:9:"lambda_1";s:16:"stdClasssecret";s:3:"shh";}', { fixNulls: true } );
+		expect( value )
+			.toEqual( new PHPTypes.PHPObject(
+				100,
+				new Map( [
+					[ new PHPTypes.PHPString( 10, 'foo' ), new PHPTypes.PHPString( 10, 'bar' ) ],
+					[ new PHPTypes.PHPString( 14, '\u0000*\u0000locked' ), new PHPTypes.PHPString( 15, '\u0000lambda_1' ) ],
+					[ new PHPTypes.PHPString( 22, '\u0000\u0000stdClasssecret' ), new PHPTypes.PHPString( 10, 'shh' ) ],
+				] ),
+				'stdClass'
+			) );
+		expect( value.toJs() )
+			.toEqual( { foo: 'bar' } );
+		expect( value.toJs( { private: true } ) )
+			.toEqual( { foo: 'bar', locked: 'lambda_1', secret: 'shh' } );
 	} );
 
 } );
@@ -244,6 +281,38 @@ describe( 'String', () => {
 			.toEqual( new PHPTypes.PHPString( 9, '🐊' ) );
 		expect( value.toJs() )
 			.toBe( '🐊' );
+	} );
+
+	test( 'Fix broken nulls - utf-8 replacement character', () => {
+		const value = parse( 's:16:"\ufffdstdClass\ufffdsecret";', { fixNulls: true } );
+		expect( value )
+			.toEqual( new PHPTypes.PHPString( 24, '\u0000stdClass\u0000secret' ) );
+		expect( value.toJs() )
+			.toEqual( '\u0000stdClass\u0000secret' );
+	} );
+
+	test( 'Fix missing nulls - protected property', () => {
+		const value = parse( 's:9:"*secret";', { fixNulls: true } );
+		expect( value )
+			.toEqual( new PHPTypes.PHPString( 14, '\u0000*\u0000secret' ) );
+		expect( value.toJs() )
+			.toEqual( '\u0000*\u0000secret' );
+	} );
+
+	test( 'Fix missing nulls - private property', () => {
+		const value = parse( 's:16:"stdClasssecret";', { fixNulls: true } );
+		expect( value )
+			.toEqual( new PHPTypes.PHPString( 22, '\u0000\u0000stdClasssecret' ) );
+		expect( value.toJs() )
+			.toEqual( '\u0000\u0000stdClasssecret' );
+	} );
+
+	test( 'Fix missing nulls - lambda', () => {
+		const value = parse( 's:9:"lambda_1";', { fixNulls: true } );
+		expect( value )
+			.toEqual( new PHPTypes.PHPString( 15, '\u0000lambda_1' ) );
+		expect( value.toJs() )
+			.toEqual( 'lambda_1' );
 	} );
 
 	test( 'Missing opening delimiter', () => {

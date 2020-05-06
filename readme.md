@@ -62,6 +62,26 @@ data.toJs();
 */
 ```
 
+### Parsing options
+
+The main `parse()` function takes two parameters, the input string, and an options object.
+
+```js
+parse( input, options? )
+```
+
+|Option|Type|Default|Description|
+|---|---|---|---|
+|`fixNulls`|Boolean|`false`|Attempt to fix missing/broken null chars in input.<br>Useful when the input was pasted from the clipboard.|
+
+The `fixNulls` option attempts to fix the following scenarios:
+
+- Nulls have been replaced with the Unicode replacement character &#xfffd;. This can happen if the serialized string was output into a HTML page.
+- Nulls are missing. This usually happens if the value was copied to the clipboard. If the string byte count was larger than the content, then the following fixes are attempted, depending on the content of the string.
+  - If the byte count is larger by 1, and the value starts with `lambda_`, then the string is probably a serialized lambda function.
+  - If the byte count is larger by 2, and the value starts with an asterisk `*`, then the string is probably a protected property.
+  - If the byte count is larger by 2, and the other scenarios do not apply, the string is probably a private class property.
+
 ## JS Value Conversion
 
 Use the `.toJs()` method on the output to convert to native JavaScript types.

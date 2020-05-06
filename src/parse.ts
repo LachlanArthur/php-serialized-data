@@ -1,6 +1,22 @@
-let objectReferences: any[] = [ null ]; // 1-indexed
+let objectReferences: any[];
 
-export function parse( input: string, resetReferences = true ) {
+export type ParseOptions = {
+	fixNulls: boolean,
+};
+
+let parseOptions: Partial<ParseOptions> = {};
+
+export function parse( input: string, options: Partial<ParseOptions> = {} ) {
+
+	objectReferences = [ null ];
+
+	parseOptions = options;
+
+	return _parse( input );
+
+}
+
+function _parse( input: string ) {
 
 	if ( typeof input !== 'string' ) {
 		throw new TypeError( 'Input must be a string' );
@@ -9,10 +25,6 @@ export function parse( input: string, resetReferences = true ) {
 	input = input.trim();
 
 	const tokenIdentifier = input.substr( 0, 1 ) as PHPTypes.Identifiers;
-
-	if ( resetReferences ) {
-		objectReferences = [ null ];
-	}
 
 	if ( tokenIdentifier in PHPTypes.identifierMap ) {
 		return PHPTypes.identifierMap[ tokenIdentifier ].build( input );
@@ -99,7 +111,59 @@ export function parseFixedLengthString( input: string, openingDelimiter = '"', c
 		if ( input.substr( offset, closingDelimiter.length ) === closingDelimiter ) {
 			offset += closingDelimiter.length;
 		} else {
-			throw new Error( 'Failed to parse fixed-length string' );
+
+			if ( parseOptions.fixNulls ) {
+				// Let's see what we can do about this
+
+				// Maybe the nulls have been converted into a replacement character.
+				// This is the easiest to fix.
+				if ( value.substr( 0, 1 ) === '\ufffd' ) {
+					input = input.replace( /\ufffd/g, '\u0000' );
+					return parseFixedLengthString( input, openingDelimiter, closingDelimiter );
+				}
+
+				// Maybe the nulls are missing, and we overshot the end of the string.
+
+				let nullCount: number;
+				const valueStart = byteCountMatches[ 0 ].length + openingDelimiter.length;
+
+				// Check for lambdas. String should have ended one byte early, and the value should start with "lambda_".
+				nullCount = 1;
+				if (
+					decoder.decode( allBytes.slice( byteCount - nullCount, byteCount - nullCount + closingDelimiter.length + 1 ) ) === closingDelimiter + ';'
+					&& /^lambda_\d+$/.test( value.substr( 0, value.length - nullCount ) )
+				) {
+					input = input.substr( 0, valueStart ) + '\u0000' + input.substr( valueStart );
+					let [ value ] = parseFixedLengthString( input, openingDelimiter, closingDelimiter );
+					return [ value, offset - nullCount + closingDelimiter.length ]; // Original offset to keep everything matched up
+				}
+
+				// Check for protected properties with a leading asterisk. String should have ended two bytes early.
+				nullCount = 2;
+				if (
+					decoder.decode( allBytes.slice( byteCount - nullCount, byteCount - nullCount + closingDelimiter.length + 1 ) ) === closingDelimiter + ';'
+					&& value.substr( 0, 1 ) === '*'
+				) {
+					input = input.replace( '*', '\u0000*\u0000' );
+					let [ value ] = parseFixedLengthString( input, openingDelimiter, closingDelimiter );
+					return [ value, offset - nullCount + closingDelimiter.length ]; // Original offset to keep everything matched up
+				}
+
+				// Check for private properties. String should have ended two bytes early.
+				nullCount = 2;
+				if ( decoder.decode( allBytes.slice( byteCount - nullCount, byteCount - nullCount + closingDelimiter.length + 1 ) ) === closingDelimiter + ';' ) {
+					// Can't determine the class name from here.
+					// Just prefix with two nulls and check in the toJS method.
+					input = input.substr( 0, valueStart ) + '\u0000\u0000' + input.substr( valueStart );
+					let [ value ] = parseFixedLengthString( input, openingDelimiter, closingDelimiter );
+					return [ value, offset - nullCount + closingDelimiter.length ]; // Original offset to keep everything matched up
+				}
+
+			} else {
+
+				throw new Error( 'Failed to parse fixed-length string' );
+
+			}
 		}
 
 		return [ value, offset ];
@@ -268,13 +332,13 @@ export namespace PHPTypes {
 
 				for ( let i = 0; i < count; i++ ) {
 
-					const key = parse( input.substr( offset ), false ) as unknown as K;
+					const key = _parse( input.substr( offset ) ) as unknown as K;
 					offset += key.length;
 
 					// Keys cannot be referenced
 					objectReferences.pop();
 
-					const value = parse( input.substr( offset ), false );
+					const value = _parse( input.substr( offset ) );
 					offset += value.length;
 
 					map.set( key, value );
@@ -361,7 +425,9 @@ export namespace PHPTypes {
 
 				if ( typeof key === 'string' && key.charCodeAt( 0 ) === 0 ) {
 					if ( options.private ) {
-						key = key.replace( /\u0000.+\u0000/, '' );
+						key = key.replace( new RegExp( `\u0000(\\*|${instance.className})\u0000` ), '' );
+						// Also handle double nulls caused by fixing missing nulls
+						key = key.replace( new RegExp( `\u0000\u0000${instance.className}` ), '' );
 					} else {
 						continue;
 					}
@@ -500,6 +566,12 @@ export namespace PHPTypes {
 		}
 
 		static toJs( instance: PHPString ) {
+
+			// Remove nulls from lambdas
+			if ( /^\u0000lambda_\d+$/.test( instance.value ) ) {
+				return instance.value.replace( /\u0000/g, '' );
+			}
+
 			return instance.value;
 		}
 
