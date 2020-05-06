@@ -120,3 +120,4 @@ The `.toJs()` method accepts an options object:
 ## TODO
 
 - Throw on trailing data
+- Option to ignore string lengths (should fix newline mismatches & trimmed whitespace)
