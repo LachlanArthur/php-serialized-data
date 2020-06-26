@@ -67,15 +67,7 @@ export function toJs(
 
 	seen.set( object, jsValue );
 
-	if ( object instanceof PHPTypes.PHPArray && options.detectArrays ) {
-
-		const arrayValue = jsValue as PHPTypes.AllTypes[];
-
-		for ( let i = 0; i < arrayValue.length; i++ ) {
-			( jsValue as any )[ i ] = toJs( arrayValue[ i ] as PHPTypes.AllTypes, options, seen );
-		}
-
-	} else if ( object instanceof PHPTypes.PHPArray || object instanceof PHPTypes.PHPObject ) {
+	if ( object instanceof PHPTypes.PHPArray || object instanceof PHPTypes.PHPObject ) {
 
 		const objectValue = jsValue as Record<string, PHPTypes.AllTypes>;
 
