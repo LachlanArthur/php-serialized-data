@@ -358,14 +358,33 @@ describe( 'Array', () => {
 			] ) ) );
 		expect( value.toJs() )
 			.toEqual( {
-				0: 'foo',
-				1: 'bar',
+				'0': 'foo',
+				'1': 'bar',
 			} );
 		expect( value.toJs( { detectArrays: true } ) )
 			.toEqual( [
 				'foo',
 				'bar',
 			] );
+	} );
+
+	test( 'Mixed keys', () => {
+		const value = parse( 'a:2:{s:3:"foo";s:3:"bar";i:0;s:3:"baz";}' );
+		expect( value )
+			.toEqual( new PHPTypes.PHPArray( 40, new Map<PHPTypes.PHPString | PHPTypes.PHPInteger, PHPTypes.AllTypes>( [
+				[ new PHPTypes.PHPString( 10, 'foo' ), new PHPTypes.PHPString( 10, 'bar' ) ],
+				[ new PHPTypes.PHPInteger( 4, 0 ), new PHPTypes.PHPString( 10, 'baz' ) ],
+			] ) ) );
+		expect( value.toJs() )
+			.toEqual( {
+				foo: 'bar',
+				'0': 'baz',
+			} );
+		expect( value.toJs( { detectArrays: true } ) )
+			.toEqual( {
+				foo: 'bar',
+				'0': 'baz'
+			} );
 	} );
 
 	test( 'Nested', () => {
