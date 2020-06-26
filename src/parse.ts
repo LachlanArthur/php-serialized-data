@@ -4,6 +4,13 @@ export type ParseOptions = {
 	fixNulls: boolean,
 };
 
+export type AccessModifier = 'public' | 'protected' | 'private';
+
+export type PHPObjectPropertyInfo = {
+	accessModifier: AccessModifier,
+	propertyName: string,
+};
+
 let parseOptions: Partial<ParseOptions> = {};
 
 export function parse( input: string, options: Partial<ParseOptions> = {} ) {
@@ -408,6 +415,26 @@ export namespace PHPTypes {
 			return toJs( this, options ) as Record<string, ValueTypes>;
 		}
 
+		static propertyInfo( propertyName: string, className: string ): PHPObjectPropertyInfo {
+
+			let accessModifier: AccessModifier = 'public';
+
+			const protectedRegExp = /^\u0000\*\u0000/;
+			// Also handle double nulls caused by fixing missing nulls
+			const privateRegExp = new RegExp( `^\u0000(\u0000${className}|${className}\u0000)` );
+
+			if ( propertyName.charCodeAt( 0 ) === 0 ) {
+				if ( protectedRegExp.test( propertyName ) ) {
+					propertyName = propertyName.replace( protectedRegExp, '' );
+					accessModifier = 'protected';
+				} else if ( privateRegExp.test( propertyName ) ) {
+					propertyName = propertyName.replace( privateRegExp, '' );
+					accessModifier = 'private';
+				}
+			}
+			return { accessModifier, propertyName };
+		}
+
 		static toJs( instance: PHPObject, options: Partial<ToJsOptions> = {} ): Record<string, AllTypes> {
 
 			const optionsHash = JSON.stringify( options );
@@ -423,12 +450,13 @@ export namespace PHPTypes {
 
 				let key = PHPKey.toJs();
 
-				if ( typeof key === 'string' && key.charCodeAt( 0 ) === 0 ) {
-					if ( options.private ) {
-						key = key.replace( new RegExp( `\u0000(\\*|${instance.className})\u0000` ), '' );
-						// Also handle double nulls caused by fixing missing nulls
-						key = key.replace( new RegExp( `\u0000\u0000${instance.className}` ), '' );
-					} else {
+				if ( typeof key === 'string' ) {
+
+					let { accessModifier, propertyName } = this.propertyInfo( key, instance.className );
+
+					key = propertyName;
+
+					if ( accessModifier !== 'public' && !options.private ) {
 						continue;
 					}
 				}
